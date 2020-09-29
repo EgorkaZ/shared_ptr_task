@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <memory>
 
 struct counting_block
 {
@@ -35,7 +36,9 @@ struct counting_block
         return this;
     }
     bool should_delete_weak()
-    { return !weak_counter; }
+    {
+        return !weak_counter;
+    }
 
     virtual void delete_object() = 0;
 
@@ -51,7 +54,8 @@ struct pointing_block final : counting_block
     pointing_block(T * object, Deleter deleter)
         : object(object)
         , deleter(std::move(deleter))
-    {}
+    {
+    }
 
     void delete_object() final
     {
@@ -64,13 +68,14 @@ struct owning_block final : counting_block
 {
     std::aligned_storage_t<sizeof(T), alignof(T)> data;
 
-    template <class ... Args>
-    explicit owning_block(Args && ... args)
+    template <class... Args>
+    explicit owning_block(Args &&... args)
     {
         new (&data) T(std::forward<Args>(args)...);
     }
 
-    T * get_ptr() {
+    T * get_ptr()
+    {
         return reinterpret_cast<T *>(&data);
     }
 
@@ -81,13 +86,13 @@ struct owning_block final : counting_block
 };
 
 namespace impl {
-    counting_block * add_shared_or_null(counting_block * block) noexcept
-    {
-        return block ? block->add_shared() : block;
-    }
-
-    counting_block * add_weak_or_null(counting_block * block) noexcept
-    {
-        return block ? block->add_weak() : block;
-    }
+counting_block * add_shared_or_null(counting_block * block) noexcept
+{
+    return block ? block->add_shared() : block;
 }
+
+counting_block * add_weak_or_null(counting_block * block) noexcept
+{
+    return block ? block->add_weak() : block;
+}
+} // namespace impl

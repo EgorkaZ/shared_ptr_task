@@ -1,9 +1,9 @@
 #pragma once
 
+#include "counting_blocks.h"
+
 #include <new>
 #include <utility>
-
-#include "counting_blocks.h"
 
 template <class T>
 struct shared_ptr;
@@ -20,40 +20,48 @@ private:
 
     template <class Y>
     friend struct weak_ptr;
-public:
 
+public:
     constexpr weak_ptr() noexcept
         : m_block(nullptr)
         , m_ptr(nullptr)
-    {}
+    {
+    }
 
     weak_ptr(const weak_ptr & other) noexcept
         : m_block(impl::add_weak_or_null(other.m_block))
         , m_ptr(other.m_ptr)
-    {}
+    {
+    }
 
     template <class Y>
     weak_ptr(const weak_ptr<Y> & other) noexcept
         : m_block(impl::add_weak_or_null(other.m_block))
         , m_ptr(other.m_ptr)
-    {}
+    {
+    }
 
     template <class Y>
     weak_ptr(const shared_ptr<Y> & other) noexcept
         : m_block(impl::add_weak_or_null(other.m_block))
         , m_ptr(other.m_ptr)
-    {}
+    {
+    }
 
     weak_ptr(weak_ptr && other) noexcept
         : m_block(impl::add_weak_or_null(other.m_block))
         , m_ptr(other.m_ptr)
-    { other.raw_clear(); }
+    {
+        other.raw_clear();
+    }
 
     template <class Y>
     weak_ptr(weak_ptr<Y> && other) noexcept
         : m_block(other.m_block)
         , m_ptr(other.m_ptr)
-    { other.raw_clear(); }
+    {
+        other.raw_clear();
+    }
 
     ~weak_ptr()
     {
@@ -62,15 +70,19 @@ public:
         }
     }
 
-    weak_ptr & operator = (const weak_ptr & other) noexcept
-    { return assign(other); }
+    weak_ptr & operator=(const weak_ptr & other) noexcept
+    {
+        return assign(other);
+    }
 
     template <class Y>
-    weak_ptr & operator = (const weak_ptr<Y> & other) noexcept
-    { return assign(other); }
+    weak_ptr & operator=(const weak_ptr<Y> & other) noexcept
+    {
+        return assign(other);
+    }
 
     template <class Y>
-    weak_ptr & operator = (const shared_ptr<Y> & other) noexcept
+    weak_ptr & operator=(const shared_ptr<Y> & other) noexcept
     {
         if (m_block != other.m_block) {
             if (m_block && m_block->delete_weak()->should_delete_weak()) {
@@ -82,12 +94,16 @@ public:
         return *this;
     }
 
-    weak_ptr & operator = (weak_ptr && other) noexcept
-    { return assign(std::move(other)); }
+    weak_ptr & operator=(weak_ptr && other) noexcept
+    {
+        return assign(std::move(other));
+    }
 
     template <class Y>
-    weak_ptr & operator = (weak_ptr<Y> && other) noexcept
-    { return assign(std::move(other)); }
+    weak_ptr & operator=(weak_ptr<Y> && other) noexcept
+    {
+        return assign(std::move(other));
+    }
 
     shared_ptr<T> lock() const noexcept
     {
@@ -100,7 +116,7 @@ public:
     }
 
 private:
-    template<class Y>
+    template <class Y>
     weak_ptr & assign(const weak_ptr<Y> & other) noexcept
     {
         if (this == &other) {
@@ -113,7 +129,7 @@ private:
             m_block = impl::add_weak_or_null(other.m_block);
         }
         m_ptr = other.m_ptr;
-        return * this;
+        return *this;
     }
 
     template <class Y>
@@ -138,5 +154,4 @@ private:
         m_block = nullptr;
         m_ptr = nullptr;
     }
-
 };
