@@ -23,7 +23,7 @@ private:
     friend struct shared_ptr;
 
     template <class Y>
-    constexpr shared_ptr(owning_block<Y> * block, Y * ptr)
+    constexpr shared_ptr(counting_block * block, Y * ptr)
         : m_block(block)
         , m_ptr(ptr)
     {
@@ -41,13 +41,24 @@ public:
     {
     }
 
-    template <class Y, class Deleter = std::default_delete<Y>>
-    explicit shared_ptr(Y * ptr, Deleter d = Deleter{})
-    try : m_block((new pointing_block<Y, Deleter>{ptr, d})->add_shared())
+    template <class Y>
+    explicit shared_ptr(Y * ptr)
+    try : m_block(new pointing_block<Y>{ptr})
+        , m_ptr(ptr) {
+    }
+    catch (...) {
+        delete ptr;
+        throw;
+    }
+
+    template <class Y, class Deleter>
+    explicit shared_ptr(Y * ptr, Deleter d)
+    try : m_block(new pointing_deleting_block<Y, Deleter>{ptr, d})
         , m_ptr(ptr) {
     }
     catch (...) {
         d(ptr);
+        throw;
     }
 
     template <class Y>
@@ -57,21 +68,21 @@ public:
     {
     }
 
-    shared_ptr(const shared_ptr & other)
+    shared_ptr(const shared_ptr & other) noexcept
         : m_block(impl::add_shared_or_null(other.m_block))
         , m_ptr(other.m_ptr)
     {
     }
 
     template <class Y>
-    shared_ptr(const shared_ptr<Y> & other)
+    shared_ptr(const shared_ptr<Y> & other) noexcept
         : m_block(impl::add_shared_or_null(other.m_block))
         , m_ptr(other.m_ptr)
     {
     }
 
     template <class Y>
-    shared_ptr(shared_ptr<Y> && other)
+    shared_ptr(shared_ptr<Y> && other) noexcept
         : m_block(other.m_block)
         , m_ptr(other.m_ptr)
     {
@@ -87,29 +98,29 @@ public:
 
     template <class Y>
     shared_ptr(const weak_ptr<Y> & weak)
-        : m_block(impl::add_shared_or_null(weak.m_block))
-        , m_ptr(weak.m_ptr)
+        : m_block(weak.expired() ? nullptr : impl::add_shared_or_null(weak.m_block))
+        , m_ptr(weak.expired() ? nullptr : weak.m_ptr)
     {
     }
 
     shared_ptr(const weak_ptr<T> & weak)
-        : m_block(impl::add_shared_or_null(weak.m_block))
-        , m_ptr(weak.m_ptr)
+        : m_block(weak.expired() ? nullptr : impl::add_shared_or_null(weak.m_block))
+        , m_ptr(weak.expired() ? nullptr : weak.m_ptr)
     {
     }
 
     ~shared_ptr()
     {
-        if (m_block) {
-            m_block->delete_shared();
+        if (m_block && m_block->delete_shared()->should_delete_block()) {
+            delete m_block;
         }
     }
 
-    shared_ptr & operator=(const shared_ptr & rhs)
+    shared_ptr & operator=(const shared_ptr & rhs) noexcept
     {
         if (&rhs != this) {
-            if (m_block) {
-                m_block->delete_shared();
+            if (m_block && m_block->delete_shared()->should_delete_block()) {
+                delete m_block;
             }
             m_block = impl::add_shared_or_null(rhs.m_block);
             m_ptr = rhs.m_ptr;
@@ -117,11 +128,11 @@ public:
         return *this;
     }
 
-    shared_ptr & operator=(shared_ptr && other)
+    shared_ptr & operator=(shared_ptr && other) noexcept
     {
         if (&other != this) {
-            if (m_block) {
-                m_block->delete_shared();
+            if (m_block && m_block->delete_shared()->should_delete_block()) {
+                delete m_block;
             }
             m_block = other.m_block;
             m_ptr = other.m_ptr;
@@ -132,8 +143,8 @@ public:
 
     void reset() noexcept
     {
-        if (m_block) {
-            m_block->delete_shared();
+        if (m_block && m_block->delete_shared()->should_delete_block()) {
+            delete m_block;
         }
         raw_clear();
     }
@@ -141,16 +152,16 @@ public:
     template <class Y, class Deleter = std::default_delete<Y>>
     void reset(Y * ptr, Deleter d = std::default_delete<Y>{})
     {
-        if (m_block) {
-            m_block->delete_shared();
+        if (m_block && m_block->delete_shared()->should_delete_block()) {
+            delete m_block;
         }
         try {
-            m_block = (new pointing_block(ptr, d))->add_shared();
+            m_block = new pointing_deleting_block(ptr, d);
             m_ptr = ptr;
         }
         catch (...) {
             d(ptr);
-            throw std::bad_alloc{};
+            throw;
         }
     }
 
@@ -169,7 +180,7 @@ public:
         return m_ptr;
     }
 
-    T & operator[](std::ptrdiff_t idx) const
+    T & operator[](std::ptrdiff_t idx) const noexcept
     {
         return m_ptr[idx];
     }
@@ -185,23 +196,23 @@ public:
     }
 
     template <class U>
-    bool operator==(const shared_ptr<U> & rhs) const
+    bool operator==(const shared_ptr<U> & rhs) const noexcept
     {
         return m_ptr == rhs.m_ptr;
     }
 
     template <class U>
-    bool operator!=(const shared_ptr<U> & rhs) const
+    bool operator!=(const shared_ptr<U> & rhs) const noexcept
     {
         return m_ptr != rhs.m_ptr;
     }
 
-    friend bool operator==(const shared_ptr & lhs, const shared_ptr & rhs)
+    friend bool operator==(const shared_ptr & lhs, const shared_ptr & rhs) noexcept
     {
         return lhs.m_ptr == rhs.m_ptr;
     }
 
-    friend bool operator!=(const shared_ptr & lhs, const shared_ptr & rhs)
+    friend bool operator!=(const shared_ptr & lhs, const shared_ptr & rhs) noexcept
     {
         return lhs.m_ptr != rhs.m_ptr;
     }
@@ -210,7 +221,7 @@ public:
     friend shared_ptr<Y> make_shared(Args &&... args);
 
 private:
-    void raw_clear()
+    void raw_clear() noexcept
     {
         m_block = nullptr;
         m_ptr = nullptr;
@@ -218,9 +229,8 @@ private:
 };
 
 template <class Y, class... Args>
-inline shared_ptr<Y> make_shared(Args &&... args)
+shared_ptr<Y> make_shared(Args &&... args)
 {
     auto block = new owning_block<Y>(std::forward<Args>(args)...);
-    block->add_shared();
-    return shared_ptr<Y>{block, block->get_ptr()};
+    return shared_ptr<Y>(static_cast<counting_block*>(block), block->get_ptr());
 }

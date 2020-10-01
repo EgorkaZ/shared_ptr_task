@@ -49,7 +49,7 @@ public:
     }
 
     weak_ptr(weak_ptr && other) noexcept
-        : m_block(impl::add_weak_or_null(other.m_block))
+        : m_block(other.m_block)
         , m_ptr(other.m_ptr)
     {
         other.raw_clear();
@@ -65,7 +65,7 @@ public:
 
     ~weak_ptr()
     {
-        if (m_block && m_block->delete_weak()->should_delete_weak()) {
+        if (m_block && m_block->delete_weak()->should_delete_block()) {
             delete m_block;
         }
     }
@@ -85,7 +85,7 @@ public:
     weak_ptr & operator=(const shared_ptr<Y> & other) noexcept
     {
         if (m_block != other.m_block) {
-            if (m_block && m_block->delete_weak()->should_delete_weak()) {
+            if (m_block && m_block->delete_weak()->should_delete_block()) {
                 delete m_block;
             }
             m_block = impl::add_weak_or_null(other.m_block);
@@ -112,18 +112,15 @@ public:
 
     bool expired() const noexcept
     {
-        return !m_block || !m_block->counter;
+        return !m_block || m_block->counter == 0;
     }
 
 private:
     template <class Y>
     weak_ptr & assign(const weak_ptr<Y> & other) noexcept
     {
-        if (this == &other) {
-            return *this;
-        }
         if (other.m_block != m_block) {
-            if (m_block && m_block->delete_weak()->should_delete_weak()) {
+            if (m_block && m_block->delete_weak()->should_delete_block()) {
                 delete m_block;
             }
             m_block = impl::add_weak_or_null(other.m_block);
@@ -139,7 +136,7 @@ private:
             return *this;
         }
         if (other.m_block != m_block) {
-            if (m_block && m_block->delete_weak()->should_delete_weak()) {
+            if (m_block && m_block->delete_weak()->should_delete_block()) {
                 delete m_block;
             }
             m_block = other.m_block;

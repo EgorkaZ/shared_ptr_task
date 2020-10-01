@@ -1,12 +1,11 @@
 #pragma once
 
 #include <cstddef>
-#include <memory>
 
 struct counting_block
 {
-    size_t counter = 0;
-    size_t weak_counter = 0;
+    size_t counter = 1;
+    size_t weak_counter = 1;
 
     counting_block * add_shared() noexcept
     {
@@ -21,23 +20,25 @@ struct counting_block
         return this;
     }
 
-    void delete_shared()
+    counting_block * delete_shared() noexcept
     {
         --counter;
         --weak_counter;
-        if (!counter) {
+        if (counter == 0) {
             delete_object();
         }
+        return this;
     }
 
-    counting_block * delete_weak()
+    counting_block * delete_weak() noexcept
     {
         --weak_counter;
         return this;
     }
-    bool should_delete_weak()
+
+    bool should_delete_block() noexcept
     {
-        return !weak_counter;
+        return weak_counter == 0;
     }
 
     virtual void delete_object() = 0;
@@ -45,21 +46,36 @@ struct counting_block
     virtual ~counting_block() = default;
 };
 
-template <class T, class Deleter>
-struct pointing_block final : counting_block
+template <class T>
+struct pointing_block : counting_block
 {
     T * object;
+
+    pointing_block(T * object) noexcept
+        : object(object)
+    {
+    }
+
+    virtual void delete_object() override
+    {
+        delete object;
+    }
+};
+
+template <class T, class Deleter>
+struct pointing_deleting_block final : pointing_block<T>
+{
     Deleter deleter;
 
-    pointing_block(T * object, Deleter deleter)
-        : object(object)
+    pointing_deleting_block(T * object, Deleter deleter) noexcept
+        : pointing_block<T>(object)
         , deleter(std::move(deleter))
     {
     }
 
     void delete_object() final
     {
-        deleter(object);
+        deleter(pointing_block<T>::object);
     }
 };
 
@@ -74,7 +90,7 @@ struct owning_block final : counting_block
         new (&data) T(std::forward<Args>(args)...);
     }
 
-    T * get_ptr()
+    T * get_ptr() noexcept
     {
         return reinterpret_cast<T *>(&data);
     }
